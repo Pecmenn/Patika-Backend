@@ -1,0 +1,61 @@
+name: patika
+
+# Kayıt dosyaları diski doldurmasın.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  mysql:
+    image: mysql:8.4
+    # Bilgisayar açılınca kendiliğinden başlamaz. Geliştirirken gerektiğinde: docker compose up -d
+    restart: "no"
+    logging: *logging
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: patika
+      MYSQL_USER: patika
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    command:
+      - --default-time-zone=+00:00
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    # Veritabanına yalnızca bu bilgisayardan erişilebilir, aynı ağdaki telefonlar göremez.
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: .
+    # Telefonlar bağlanabilsin diye ağa açık. Şifresiz http kullandığı için kullanılmadığında durdur:
+    # docker compose stop
+    restart: "no"
+    logging: *logging
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://patika:${MYSQL_PASSWORD}@mysql:3306/patika
+      APPLE_AUDIENCES: ${APPLE_AUDIENCES}
+      ALLOW_DEV_LOGIN: ${ALLOW_DEV_LOGIN:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      PHOTO_DIR: /data/photos
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    volumes:
+      - photo-data:/data/photos
+
+volumes:
+  mysql-data:
+  photo-data:
