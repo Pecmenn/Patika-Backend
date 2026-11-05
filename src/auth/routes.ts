@@ -110,11 +110,17 @@ export function registerAccountRoutes(app: FastifyInstance, { db, photos, hub }:
       .where('owner_id', '=', request.userId)
       .execute();
     await db.deleteFrom('users').where('id', '=', request.userId).execute();
-    await Promise.all(
-      reports.flatMap(({ photo_path: path }) => (path ? [photos.deleteLostPhoto(path)] : [])),
-    );
-    await photos.deleteAllPetPhotos(request.userId);
     hub.closeUser(request.userId);
+    // Hesap artık yok: telefona hata dönülürse kullanıcı silinmedi sanır, yeniden denemesi de işe yaramaz.
+    // Silinemeyen dosya kayda geçer, elle temizlenir.
+    const files = await Promise.allSettled([
+      ...reports.flatMap(({ photo_path: path }) => (path ? [photos.deleteLostPhoto(path)] : [])),
+      photos.deleteAllPetPhotos(request.userId),
+    ]);
+    const failed = files.filter(({ status }) => status === 'rejected').length;
+    if (failed > 0) {
+      request.log.error({ userId: request.userId, failed }, 'Hesap silindi, bazı fotoğraflar silinemedi');
+    }
     return reply.status(204).send();
   });
 }

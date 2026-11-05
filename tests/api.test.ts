@@ -947,6 +947,21 @@ describe('silme', () => {
     assert.equal((await pullAll(b.token)).length, 1, 'diğer kullanıcının kaydı durur');
     assert.equal((await t.call('GET', '/v1/photos/1.jpg', { token: b.token })).status, 200);
   });
+
+  test('fotoğraf silinemese de hesap silinir ve telefona başarı döner', async () => {
+    const broken = await startApp({
+      photos: { deleteAllPetPhotos: () => Promise.reject(new Error('disk hatası')) },
+    });
+    try {
+      const user = await broken.newUser();
+      assert.equal((await broken.call('DELETE', '/v1/me', { token: user.token })).status, 204);
+      assert.equal((await broken.call('GET', '/v1/me', { token: user.token })).status, 401);
+      const rows = await broken.db.selectFrom('users').select('id').where('id', '=', user.id).execute();
+      assert.equal(rows.length, 0);
+    } finally {
+      await broken.stop();
+    }
+  });
 });
 
 describe('canlı bağlantı', () => {

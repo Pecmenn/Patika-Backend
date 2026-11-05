@@ -10,7 +10,7 @@ import type { Config } from '../src/config.ts';
 import { createDb, type Db } from '../src/db.ts';
 import type { RateLimits } from '../src/deps.ts';
 import { runMigrations } from '../src/migrate.ts';
-import { createPhotoStore } from '../src/photos/store.ts';
+import { createPhotoStore, type PhotoStore } from '../src/photos/store.ts';
 import { createHub } from '../src/realtime/hub.ts';
 
 export const APPLE_AUDIENCE = 'host.exp.Exponent';
@@ -62,7 +62,11 @@ export function appleToken(
 export type TestApp = Awaited<ReturnType<typeof startApp>>;
 
 export async function startApp(
-  overrides: { config?: Partial<Config>; rateLimits?: Partial<RateLimits> } = {},
+  overrides: {
+    config?: Partial<Config>;
+    rateLimits?: Partial<RateLimits>;
+    photos?: Partial<PhotoStore>;
+  } = {},
 ) {
   const url = testDatabaseUrl();
   const photoDir = await mkdtemp(join(tmpdir(), 'patika-test-'));
@@ -82,7 +86,7 @@ export async function startApp(
     {
       config,
       db,
-      photos: createPhotoStore(photoDir),
+      photos: { ...createPhotoStore(photoDir), ...overrides.photos },
       hub: createHub(),
       appleKeys,
       rateLimits: { auth: 100000, publicRead: 100000, publicWrite: 100000, ...overrides.rateLimits },

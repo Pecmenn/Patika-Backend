@@ -11,7 +11,8 @@ export default defineConfig({
   fullyParallel: true,
   reporter: [['list']],
   expect: {
-    toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: 'disabled' },
+    // Oran değil piksel sayısı: oran büyük ekranda küçük bir yazı değişikliğini kaçırıyor.
+    toHaveScreenshot: { maxDiffPixels: 100, animations: 'disabled' },
   },
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
