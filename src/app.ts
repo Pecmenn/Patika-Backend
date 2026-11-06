@@ -7,8 +7,11 @@ import websocket from '@fastify/websocket';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import { sql } from 'kysely';
 
+import { registerAppointmentRoutes } from './appointments/routes.ts';
 import { registerAccountRoutes, registerPublicAuthRoutes } from './auth/routes.ts';
-import { requireUser } from './auth/sessions.ts';
+import { requireRole, requireUser } from './auth/sessions.ts';
+import { registerPublicClinicRoutes } from './clinics/public-routes.ts';
+import { registerClinicRoutes } from './clinics/routes.ts';
 import type { Deps } from './deps.ts';
 import { ApiError, handleError, handleNotFound } from './http.ts';
 import { registerPublicLostRoutes } from './lost/public-routes.ts';
@@ -89,15 +92,27 @@ export async function buildApp(deps: Deps, logger: FastifyServerOptions['logger'
 
   registerPublicAuthRoutes(app, deps);
   registerPublicLostRoutes(app, deps);
+  registerPublicClinicRoutes(app, deps);
   registerRealtimeRoutes(app, deps);
 
   // Bu blok içindeki her uç giriş ister. Yeni uç eklenirse varsayılan olarak korunur.
   await app.register(async (scope) => {
     scope.addHook('onRequest', requireUser(db));
     registerAccountRoutes(scope, deps);
-    registerSyncRoutes(scope, deps);
-    registerPhotoRoutes(scope, deps);
-    registerLostRoutes(scope, deps);
+
+    // Sahip uçları: veteriner hesabı telefondaki kayıtları ya da kayıp ilanlarını kullanamaz.
+    await scope.register(async (owners) => {
+      owners.addHook('onRequest', requireRole('owner'));
+      registerSyncRoutes(owners, deps);
+      registerPhotoRoutes(owners, deps);
+      registerLostRoutes(owners, deps);
+      registerAppointmentRoutes(owners, deps);
+    });
+
+    await scope.register(async (vets) => {
+      vets.addHook('onRequest', requireRole('vet'));
+      registerClinicRoutes(vets, deps);
+    });
   });
 
   return app;

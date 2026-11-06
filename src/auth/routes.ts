@@ -3,10 +3,12 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import { cancelUpcomingOfClinic, prepareOwnerDeletion } from '../appointments/lifecycle.ts';
 import { isDuplicateKey, type Db } from '../db.ts';
 import type { Deps } from '../deps.ts';
 import { ApiError, parse } from '../http.ts';
 import { verifyAppleToken } from './apple.ts';
+import { decoyHash, hashPassword, verifyPassword } from './passwords.ts';
 import { createSession, revokeSession } from './sessions.ts';
 
 const AppleLogin = z.object({
@@ -16,17 +18,32 @@ const AppleLogin = z.object({
   family_name: z.string().trim().max(100).nullish(),
 });
 
+// Küçük harfe çevrilir: aynı adres farklı yazılışla ikinci hesap açamasın.
+const VetEmail = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
+  z.email().max(320),
+);
+const NewVetLogin = z.object({ email: VetEmail, password: z.string().min(8).max(200) });
+const VetLogin = z.object({ email: VetEmail, password: z.string().min(1).max(200) });
+
+function providerOf(role: string, appleSub: string | null) {
+  if (role === 'vet') {
+    return 'email';
+  }
+  return appleSub ? 'apple' : 'development';
+}
+
 async function loadUser(db: Db, userId: string) {
   const user = await db
     .selectFrom('users')
-    .select(['id', 'apple_sub', 'email', 'full_name', 'given_name', 'family_name'])
+    .select(['id', 'apple_sub', 'email', 'full_name', 'given_name', 'family_name', 'role'])
     .where('id', '=', userId)
     .executeTakeFirst();
   if (!user) {
     throw new ApiError(401, 'unauthorized');
   }
   const { apple_sub: appleSub, ...visible } = user;
-  return { ...visible, provider: appleSub ? 'apple' : 'development' };
+  return { ...visible, provider: providerOf(user.role, appleSub) };
 }
 
 async function findOrCreateAppleUser(
@@ -80,6 +97,48 @@ export function registerPublicAuthRoutes(
     return { token: await createSession(db, userId), user: await loadUser(db, userId) };
   });
 
+  // Veteriner hesabı. Sahip hesaplarından ayrıdır, Apple girişiyle karışmaz.
+  app.post('/v1/auth/vet/register', { config: { rateLimit } }, async (request, reply) => {
+    const { email, password } = parse(NewVetLogin, request.body);
+    const id = randomUUID();
+    const passwordHash = await hashPassword(password);
+    try {
+      await db.transaction().execute(async (trx) => {
+        await trx.insertInto('users').values({ id, email, role: 'vet' }).execute();
+        await trx
+          .insertInto('vet_logins')
+          .values({ user_id: id, email, password_hash: passwordHash })
+          .execute();
+      });
+    } catch (error) {
+      if (isDuplicateKey(error)) {
+        throw new ApiError(409, 'email_taken');
+      }
+      throw error;
+    }
+    return reply
+      .status(201)
+      .send({ token: await createSession(db, id), user: await loadUser(db, id) });
+  });
+
+  // Yanlış şifre ve kayıtsız e-posta aynı cevabı alır.
+  app.post('/v1/auth/vet/login', { config: { rateLimit } }, async (request) => {
+    const { email, password } = parse(VetLogin, request.body);
+    const login = await db
+      .selectFrom('vet_logins')
+      .select(['user_id', 'password_hash'])
+      .where('email', '=', email)
+      .executeTakeFirst();
+    const isValid = await verifyPassword(password, login?.password_hash ?? (await decoyHash()));
+    if (!login || !isValid) {
+      throw new ApiError(401, 'invalid_credentials');
+    }
+    return {
+      token: await createSession(db, login.user_id),
+      user: await loadUser(db, login.user_id),
+    };
+  });
+
   // Yalnızca geliştirirken: taklitçi ve testler Apple olmadan giriş yapabilsin.
   // Her çağrı boş, yeni bir hesap açar, kimsenin verisine ulaştırmaz.
   if (config.ALLOW_DEV_LOGIN) {
@@ -109,12 +168,24 @@ export function registerAccountRoutes(app: FastifyInstance, { db, photos, hub }:
       .select('photo_path')
       .where('owner_id', '=', request.userId)
       .execute();
+    const clinic = await db
+      .selectFrom('clinics')
+      .select(['id', 'photo_path'])
+      .where('owner_id', '=', request.userId)
+      .executeTakeFirst();
+    // Klinik silinirse yaklaşan randevular iptal olur, sahip silinirse klinik listesi yenilenir.
+    if (clinic) {
+      await cancelUpcomingOfClinic(db, hub, clinic.id);
+    }
+    const notifyClinics = await prepareOwnerDeletion(db, hub, request.userId);
     await db.deleteFrom('users').where('id', '=', request.userId).execute();
+    notifyClinics();
     hub.closeUser(request.userId);
     // Hesap artık yok: telefona hata dönülürse kullanıcı silinmedi sanır, yeniden denemesi de işe yaramaz.
     // Silinemeyen dosya kayda geçer, elle temizlenir.
     const files = await Promise.allSettled([
       ...reports.flatMap(({ photo_path: path }) => (path ? [photos.deleteLostPhoto(path)] : [])),
+      ...(clinic?.photo_path ? [photos.deleteClinicPhoto(clinic.photo_path)] : []),
       photos.deleteAllPetPhotos(request.userId),
     ]);
     const failed = files.filter(({ status }) => status === 'rejected').length;

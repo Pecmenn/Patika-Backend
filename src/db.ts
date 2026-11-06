@@ -4,6 +4,11 @@ import { createPool } from 'mysql2';
 type Timestamp = ColumnType<Date, Date | undefined, Date>;
 type RequiredTimestamp = ColumnType<Date, Date, Date>;
 
+export type Role = 'owner' | 'vet';
+export type DayHours = { open: string; close: string } | null;
+export type ClinicStatus = 'pending' | 'approved' | 'rejected';
+export type AppointmentStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled';
+
 export interface UsersTable {
   id: string;
   apple_sub: string | null;
@@ -11,7 +16,61 @@ export interface UsersTable {
   full_name: string | null;
   given_name: string | null;
   family_name: string | null;
+  role: ColumnType<Role, Role | undefined, Role>;
   created_at: Timestamp;
+}
+
+export interface VetLoginsTable {
+  user_id: string;
+  email: string;
+  password_hash: string;
+  created_at: Timestamp;
+}
+
+export interface ClinicsTable {
+  id: string;
+  owner_id: string;
+  status: ClinicStatus;
+  name: string;
+  vet_name: string;
+  license_no: string;
+  phone: string;
+  address: string;
+  area: string;
+  lat: number;
+  lng: number;
+  hours: ColumnType<DayHours[], string, string>;
+  slot_minutes: number;
+  species: ColumnType<string[], string, string>;
+  services: ColumnType<string[], string, string>;
+  description: string | null;
+  website: string | null;
+  instagram: string | null;
+  photo_path: string | null;
+  created_at: Timestamp;
+}
+
+export interface AppointmentsTable {
+  id: string;
+  clinic_id: string | null;
+  clinic_name: string;
+  owner_id: string;
+  pet_id: string;
+  pet_name: string;
+  species: string;
+  breed: string | null;
+  pet_age: string | null;
+  owner_name: string;
+  owner_phone: string;
+  reason: string;
+  note: string | null;
+  starts_at: RequiredTimestamp;
+  status: ColumnType<AppointmentStatus, AppointmentStatus | undefined, AppointmentStatus>;
+  cancelled_by: 'owner' | 'vet' | null;
+  vet_note: string | null;
+  created_at: Timestamp;
+  responded_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  confirmed_slot: ColumnType<Date | null, never, never>;
 }
 
 export interface SessionsTable {
@@ -77,6 +136,9 @@ export interface Database {
   pet_tags: PetTagsTable;
   lost_reports: LostReportsTable;
   sightings: SightingsTable;
+  vet_logins: VetLoginsTable;
+  clinics: ClinicsTable;
+  appointments: AppointmentsTable;
 }
 
 export type Db = Kysely<Database>;

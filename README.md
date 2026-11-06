@@ -80,3 +80,15 @@ Kısaca: `POST /v1/auth/apple`, `POST /v1/auth/dev` (yalnızca geliştirirken), 
 - Parolaları yenile, veritabanı yedeği kur.
 - Önünde başka bir sunucu varsa `TRUST_PROXY=true`, yoksa ziyaretçi sınırları hepsini tek kişi sayar (Docker'da şu an da öyle: dakikada 10 ihbar sınırı herkes için ortak). Sunucunun zaman dilimi UTC olmalı.
 - `APPLE_AUDIENCES` listesine uygulamanın kendi kimliğini ekle, `host.exp.Exponent` değerini çıkar.
+
+## Klinik onayı
+
+Kayıt olan klinik onaylanmadan sahiplerin listesinde görünmez. Onay şimdilik komutla verilir:
+
+```bash
+npm run clinic -- list
+npm run clinic -- approve <kimlik>
+npm run clinic -- reject <kimlik>
+```
+
+Onaylamadan önce oda sicil numarası kontrol edilmeli. Onaydan sonra klinik adı, hekim adı ya da sicil numarası değişirse klinik yeniden onaya düşer.

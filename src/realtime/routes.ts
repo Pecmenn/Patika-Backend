@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
-import { userIdForToken } from '../auth/sessions.ts';
+import { userForToken } from '../auth/sessions.ts';
 import type { Deps } from '../deps.ts';
 
 const AUTH_TIMEOUT_MS = 5000;
@@ -46,7 +46,7 @@ export function registerRealtimeRoutes(app: FastifyInstance, { db, hub }: Deps) 
         return;
       }
       try {
-        const found = await userIdForToken(db, token);
+        const found = (await userForToken(db, token))?.id;
         if (!found) {
           socket.close(UNAUTHORIZED, 'unauthorized');
           return;

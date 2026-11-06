@@ -11,6 +11,7 @@
     "start": "node src/server.ts",
     "test": "node --no-warnings --env-file=.env --test --test-concurrency=1 tests/*.test.ts",
     "test:page": "playwright test",
+    "clinic": "node --no-warnings --env-file=.env scripts/clinics.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

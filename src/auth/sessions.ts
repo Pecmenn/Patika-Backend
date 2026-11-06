@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import type { FastifyRequest } from 'fastify';
 
-import type { Db } from '../db.ts';
+import type { Db, Role } from '../db.ts';
 import { ApiError } from '../http.ts';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -12,6 +12,7 @@ const SESSION_MS = 180 * DAY_MS;
 declare module 'fastify' {
   interface FastifyRequest {
     userId: string;
+    userRole: Role;
     sessionToken: string;
   }
 }
@@ -38,12 +39,13 @@ export async function createSession(db: Db, userId: string) {
   return token;
 }
 
-export async function userIdForToken(db: Db, token: string) {
+export async function userForToken(db: Db, token: string) {
   const tokenHash = hashToken(token);
   const session = await db
     .selectFrom('sessions')
-    .select(['user_id', 'last_used_at', 'expires_at'])
-    .where('token_hash', '=', tokenHash)
+    .innerJoin('users', 'users.id', 'sessions.user_id')
+    .select(['sessions.user_id', 'sessions.last_used_at', 'sessions.expires_at', 'users.role'])
+    .where('sessions.token_hash', '=', tokenHash)
     .executeTakeFirst();
   const now = Date.now();
   if (!session || session.expires_at.getTime() <= now) {
@@ -57,7 +59,7 @@ export async function userIdForToken(db: Db, token: string) {
       .where('token_hash', '=', tokenHash)
       .execute();
   }
-  return session.user_id;
+  return { id: session.user_id, role: session.role };
 }
 
 export async function revokeSession(db: Db, token: string) {
@@ -69,11 +71,21 @@ export function requireUser(db: Db) {
   return async (request: FastifyRequest) => {
     const header = request.headers.authorization;
     const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
-    const userId = token ? await userIdForToken(db, token) : null;
-    if (!token || !userId) {
+    const user = token ? await userForToken(db, token) : null;
+    if (!token || !user) {
       throw new ApiError(401, 'unauthorized');
     }
-    request.userId = userId;
+    request.userId = user.id;
+    request.userRole = user.role;
     request.sessionToken = token;
+  };
+}
+
+// Sahip ve veteriner uçları birbirinden ayrıdır: yanlış rol burada durur.
+export function requireRole(role: Role) {
+  return async (request: FastifyRequest) => {
+    if (request.userRole !== role) {
+      throw new ApiError(403, 'forbidden');
+    }
   };
 }

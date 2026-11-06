@@ -21,6 +21,7 @@ async function readIfExists(path: string) {
 export function createPhotoStore(root: string) {
   const petDir = (userId: string) => join(root, 'pets', userId);
   const lostDir = join(root, 'lost');
+  const clinicDir = join(root, 'clinics');
 
   return {
     async savePetPhoto(userId: string, name: string, bytes: Buffer) {
@@ -41,5 +42,14 @@ export function createPhotoStore(root: string) {
     },
     readLostPhoto: (file: string) => readIfExists(join(lostDir, file)),
     deleteLostPhoto: (file: string) => rm(join(lostDir, file), { force: true }),
+
+    async saveClinicPhoto(bytes: Buffer) {
+      await mkdir(clinicDir, { recursive: true });
+      const file = `${randomUUID()}.jpg`;
+      await writeFile(join(clinicDir, file), bytes);
+      return file;
+    },
+    readClinicPhoto: (file: string) => readIfExists(join(clinicDir, file)),
+    deleteClinicPhoto: (file: string) => rm(join(clinicDir, file), { force: true }),
   };
 }

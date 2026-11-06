@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { sql } from 'kysely';
 import { z } from 'zod';
 
+import { cancelUpcomingOfPet } from '../appointments/lifecycle.ts';
 import type { Deps } from '../deps.ts';
 import { ApiError, parse } from '../http.ts';
 import { removePetLostData } from '../lost/cleanup.ts';
@@ -49,7 +50,7 @@ function decodeKey(key: string) {
 // Eşlenmemiş yarım emoji metinde kalırsa MySQL kaydı reddeder ve eşitleme takılır.
 const LONE_SURROGATE = /\\ud[89ab][0-9a-f]{2}(?!\\ud[c-f][0-9a-f]{2})|(?<!\\ud[89ab][0-9a-f]{2})\\ud[c-f][0-9a-f]{2}/gi;
 
-export function registerSyncRoutes(app: FastifyInstance, { db, photos }: Deps) {
+export function registerSyncRoutes(app: FastifyInstance, { db, photos, hub }: Deps) {
   app.get('/v1/items', async (request) => {
     const { since, after, limit } = parse(PullQuery, request.query);
 
@@ -122,8 +123,8 @@ export function registerSyncRoutes(app: FastifyInstance, { db, photos }: Deps) {
         updated_at = GREATEST(incoming.updated_at, user_items.updated_at)
     `.execute(db);
 
-    // Hayvan başka telefondan ya da internetsiz silinmiş olabilir: QR'ı, ilanları ve ihbarları da
-    // burada temizlenir, yoksa QR çalışmaya ve haber almaya devam ederdi.
+    // Hayvan başka telefondan ya da internetsiz silinmiş olabilir: QR'ı, ilanları, ihbarları ve yaklaşan
+    // randevuları da burada temizlenir, yoksa QR çalışmaya, klinik de beklemeye devam ederdi.
     const removedPets = items.filter((item) => item.collection === 'pets' && item.data === null);
     if (removedPets.length > 0) {
       const confirmed = await db
@@ -136,6 +137,7 @@ export function registerSyncRoutes(app: FastifyInstance, { db, photos }: Deps) {
         .execute();
       for (const { id } of confirmed) {
         await removePetLostData(db, photos, request.userId, id);
+        await cancelUpcomingOfPet(db, hub, request.userId, id);
       }
     }
 
