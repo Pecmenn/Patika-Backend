@@ -116,12 +116,7 @@ export async function cancelUpcomingOfClinic(db: Db, hub: Hub, clinicId: string)
   }
 }
 
-// Hayvan silinince yaklaşan randevuları iptal olur, klinik boşuna beklemez.
-export async function cancelUpcomingOfPet(db: Db, hub: Hub, ownerId: string, petId: string) {
-  const rows = await upcoming(db)
-    .where('owner_id', '=', ownerId)
-    .where('pet_id', '=', petId)
-    .execute();
+async function cancelForOwner(db: Db, hub: Hub, rows: Upcoming) {
   await cancelRows(db, rows, 'owner');
   const owners = await clinicOwners(db, rows.flatMap((row) => row.clinic_id ?? []));
   for (const row of rows) {
@@ -130,6 +125,20 @@ export async function cancelUpcomingOfPet(db: Db, hub: Hub, ownerId: string, pet
       publishAppointment(hub, clinicOwner, 'cancelled', row);
     }
   }
+}
+
+// Hayvan silinince yaklaşan randevuları iptal olur, klinik boşuna beklemez.
+export async function cancelUpcomingOfPet(db: Db, hub: Hub, ownerId: string, petId: string) {
+  const rows = await upcoming(db)
+    .where('owner_id', '=', ownerId)
+    .where('pet_id', '=', petId)
+    .execute();
+  await cancelForOwner(db, hub, rows);
+}
+
+// Yönetici sahibin hesabını kapatınca randevuları iptal olur, klinik boşuna beklemez.
+export async function cancelUpcomingOfOwner(db: Db, hub: Hub, ownerId: string) {
+  await cancelForOwner(db, hub, await upcoming(db).where('owner_id', '=', ownerId).execute());
 }
 
 // Sahip hesabını silince randevular da silinir. Kliniklerin listesi yenilensin diye önceden toplanır.

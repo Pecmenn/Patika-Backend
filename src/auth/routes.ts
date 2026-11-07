@@ -19,14 +19,14 @@ const AppleLogin = z.object({
 });
 
 // Küçük harfe çevrilir: aynı adres farklı yazılışla ikinci hesap açamasın.
-const VetEmail = z.preprocess(
+export const LoginEmail = z.preprocess(
   (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
   z.email().max(320),
 );
-const NewVetLogin = z.object({ email: VetEmail, password: z.string().min(8).max(200) });
-const VetLogin = z.object({ email: VetEmail, password: z.string().min(1).max(200) });
+const NewVetLogin = z.object({ email: LoginEmail, password: z.string().min(8).max(200) });
+const VetLogin = z.object({ email: LoginEmail, password: z.string().min(1).max(200) });
 
-function providerOf(role: string, appleSub: string | null) {
+export function providerOf(role: string, appleSub: string | null) {
   if (role === 'vet') {
     return 'email';
   }

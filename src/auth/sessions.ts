@@ -17,11 +17,20 @@ declare module 'fastify' {
   }
 }
 
-function hashToken(token: string) {
+export function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+// Her giriş yolu buradan geçer: yöneticinin kapattığı hesap hiçbir yoldan oturum açamaz.
 export async function createSession(db: Db, userId: string) {
+  const user = await db
+    .selectFrom('users')
+    .select('suspended_at')
+    .where('id', '=', userId)
+    .executeTakeFirst();
+  if (user?.suspended_at) {
+    throw new ApiError(403, 'account_suspended');
+  }
   const token = randomBytes(32).toString('base64url');
   await db
     .deleteFrom('sessions')
@@ -46,6 +55,7 @@ export async function userForToken(db: Db, token: string) {
     .innerJoin('users', 'users.id', 'sessions.user_id')
     .select(['sessions.user_id', 'sessions.last_used_at', 'sessions.expires_at', 'users.role'])
     .where('sessions.token_hash', '=', tokenHash)
+    .where('users.suspended_at', 'is', null)
     .executeTakeFirst();
   const now = Date.now();
   if (!session || session.expires_at.getTime() <= now) {

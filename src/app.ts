@@ -7,6 +7,7 @@ import websocket from '@fastify/websocket';
 import Fastify, { type FastifyServerOptions } from 'fastify';
 import { sql } from 'kysely';
 
+import { registerAdminRoutes } from './admin/routes.ts';
 import { registerAppointmentRoutes } from './appointments/routes.ts';
 import { registerAccountRoutes, registerPublicAuthRoutes } from './auth/routes.ts';
 import { requireRole, requireUser } from './auth/sessions.ts';
@@ -35,12 +36,17 @@ const PAGE_POLICY = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+// Panelde arama metni adreste gider, içinde e-posta ya da ad olabilir: kayda yazılmaz.
+export function loggedUrl(url: string) {
+  return url.startsWith('/admin/api') ? url.split('?')[0] : url;
+}
+
 // Kayıtlara yöntem ve adres yazılır. Ziyaretçi adresi kişisel veri, gerekmedikçe tutulmaz.
 const REQUEST_LOGGER = {
   serializers: {
     req: (request: { method: string; url: string }) => ({
       method: request.method,
-      url: request.url,
+      url: loggedUrl(request.url),
     }),
   },
 };
@@ -94,6 +100,7 @@ export async function buildApp(deps: Deps, logger: FastifyServerOptions['logger'
   registerPublicLostRoutes(app, deps);
   registerPublicClinicRoutes(app, deps);
   registerRealtimeRoutes(app, deps);
+  await registerAdminRoutes(app, deps);
 
   // Bu blok içindeki her uç giriş ister. Yeni uç eklenirse varsayılan olarak korunur.
   await app.register(async (scope) => {

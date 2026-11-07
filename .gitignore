@@ -1,5 +1,6 @@
 node_modules/
 .env
+panel-hesabi.txt
 data/
 test-results/
 playwright-report/

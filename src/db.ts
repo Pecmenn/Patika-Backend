@@ -18,6 +18,21 @@ export interface UsersTable {
   family_name: string | null;
   role: ColumnType<Role, Role | undefined, Role>;
   created_at: Timestamp;
+  suspended_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+}
+
+export interface AdminsTable {
+  id: string;
+  email: string;
+  password_hash: string;
+  created_at: Timestamp;
+}
+
+export interface AdminSessionsTable {
+  token_hash: string;
+  admin_id: string;
+  created_at: Timestamp;
+  expires_at: RequiredTimestamp;
 }
 
 export interface VetLoginsTable {
@@ -113,6 +128,7 @@ export interface LostReportsTable {
   last_seen_at: RequiredTimestamp;
   started_at: Timestamp;
   found_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+  removed_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   active_pet_id: ColumnType<string | null, never, never>;
 }
 
@@ -139,6 +155,8 @@ export interface Database {
   vet_logins: VetLoginsTable;
   clinics: ClinicsTable;
   appointments: AppointmentsTable;
+  admins: AdminsTable;
+  admin_sessions: AdminSessionsTable;
 }
 
 export type Db = Kysely<Database>;

@@ -31,8 +31,11 @@ async function findTag(db: Db, params: unknown) {
   const tag = parsed.success
     ? await db
         .selectFrom('pet_tags')
-        .select(['owner_id', 'pet_id'])
-        .where('public_code', '=', parsed.data.code)
+        .innerJoin('users', 'users.id', 'pet_tags.owner_id')
+        .select(['pet_tags.owner_id', 'pet_tags.pet_id'])
+        .where('pet_tags.public_code', '=', parsed.data.code)
+        // Kapatılan hesabın sayfası kapanır: bulan kişi kimsenin okuyamayacağı bir mesaj bırakmasın.
+        .where('users.suspended_at', 'is', null)
         .executeTakeFirst()
     : undefined;
   if (!tag) {
@@ -64,6 +67,7 @@ export function registerPublicLostRoutes(
           'last_seen_at',
           'started_at',
           'found_at',
+          'removed_at',
         ])
         .where('owner_id', '=', tag.owner_id)
         .where('pet_id', '=', tag.pet_id)
@@ -72,14 +76,15 @@ export function registerPublicLostRoutes(
         .limit(1)
         .executeTakeFirst();
 
-      if (!report) {
+      // Yöneticinin kaldırdığı ilan sayfada hiç görünmez, eski bir ilana da dönülmez.
+      if (!report || report.removed_at) {
         return { status: 'none' };
       }
       // Bulunan ilanda yalnızca ad ve durum kalır.
       if (report.found_at) {
         return { status: 'found', pet_name: report.pet_name };
       }
-      const { found_at: _found, ...visible } = report;
+      const { found_at: _found, removed_at: _removed, ...visible } = report;
       return { status: 'lost', ...visible };
     },
   );

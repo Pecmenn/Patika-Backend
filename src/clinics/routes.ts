@@ -73,8 +73,13 @@ export function registerClinicRoutes(app: FastifyInstance, { db, photos, hub }: 
         existing.name === body.name &&
         existing.vet_name === body.vet_name &&
         existing.license_no === body.license_no;
-      const status = existing.status === 'approved' && isSameIdentity ? 'approved' : 'pending';
-      await db.updateTable('clinics').set({ ...values, status }).where('id', '=', existing.id).execute();
+      // Onay sürüyorsa durum hiç yazılmaz: aynı anda verilen ret kararı geri alınmasın.
+      const stays = existing.status === 'approved' && isSameIdentity;
+      await db
+        .updateTable('clinics')
+        .set({ ...values, ...(stays ? {} : { status: 'pending' as const }) })
+        .where('id', '=', existing.id)
+        .execute();
     } else {
       try {
         await db

@@ -9,6 +9,7 @@ RUN npm ci --omit=dev
 COPY src ./src
 COPY migrations ./migrations
 COPY public ./public
+COPY scripts ./scripts
 
 # Fotoğraflar kalıcı alanda durur, sunucu yönetici yetkisi olmadan çalışır.
 RUN mkdir -p /data/photos && chown -R node:node /data
